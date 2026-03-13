@@ -1,0 +1,72 @@
+name: Ultimate-Win10-No-CRD-Optimized
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      
+      # 1. تثبيت VirtualBox فقط
+      - name: Install VirtualBox
+        shell: pwsh
+        run: |
+          Write-Host "⬇️ Downloading VirtualBox..."
+          $vboxUrl = "https://download.virtualbox.org/virtualbox/6.1.48/VirtualBox-6.1.48-159471-Win.exe"
+          (New-Object System.Net.WebClient).DownloadFile($vboxUrl, "VirtualBox-Setup.exe")
+          Start-Process -FilePath "VirtualBox-Setup.exe" -Args "--silent --ignore-reboot" -Wait
+          Write-Host "✅ VirtualBox Installed Successfully."
+
+      # 2. تحميل وفك ضغط النظام (OS)
+      - name: Download and Extract OS
+        shell: cmd
+        run: |
+          @echo off
+          cd /d "%USERPROFILE%\Desktop"
+          set "FILE_URL=https://huggingface.co/datasets/gfdg34fsd/rdp/resolve/main/wino.zip"
+          echo ⬇️ Downloading OS files...
+          curl -L -o BigFile.zip "%FILE_URL%"
+          echo 📦 Extracting files...
+          7z x BigFile.zip -y
+          del BigFile.zip
+          echo ✅ Extraction Complete.
+
+      # 3. تسجيل النظام وتشغيله في الخلفية
+      - name: Register and Start VMs
+        shell: pwsh
+        run: |
+          $vboxManage = "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe"
+          $winFolder = "$env:USERPROFILE\Desktop\wino"
+          
+          $vboxFile = Get-ChildItem -Path $winFolder -Filter *.vbox -Recurse | Select-Object -First 1
+          
+          if ($vboxFile) {
+              $vmPath = $vboxFile.FullName
+              $originalVmName = $vboxFile.BaseName
+              $cloneName = "$originalVmName-Clone"
+              
+              Write-Host "📦 Registering VM..."
+              & $vboxManage registervm "$vmPath"
+              
+              Write-Host "📸 Creating Snapshot..."
+              & $vboxManage snapshot "$originalVmName" take "BaseSnap"
+              
+              Write-Host "🧬 Creating Linked Clone..."
+              & $vboxManage clonevm "$originalVmName" --snapshot "BaseSnap" --options link --name "$cloneName" --register
+
+              Write-Host "🚀 Starting VMs in Headless Mode (Background)..."
+              & $vboxManage startvm "$originalVmName" --type headless
+              & $vboxManage startvm "$cloneName" --type headless
+              
+              Write-Host "✅ Both VMs are running in the background."
+          } else {
+              Write-Error "❌ Could not find a .vbox file."
+          }
+
+      # 4. البقاء نشطاً (حتى لا ينتهي الـ Workflow فوراً)
+      - name: Keep Alive
+        shell: pwsh
+        run: |
+          Write-Host "✅ System is active. Running for 6 hours or until manual stop."
+          while ($true) { Start-Sleep -Seconds 300 }
